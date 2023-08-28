@@ -118,18 +118,32 @@ void blendBg(const cv::Mat& bgMask, const cv::Mat& overlay, cv::Mat& output) {
 			output.at<cv::Vec4b>(i, j)[0] = bgMask.at<cv::Vec4b>(i, j)[0] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[0] * alpha_src;
 			output.at<cv::Vec4b>(i, j)[1] = bgMask.at<cv::Vec4b>(i, j)[1] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[1] * alpha_src;
 			output.at<cv::Vec4b>(i, j)[2] = bgMask.at<cv::Vec4b>(i, j)[2] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[2] * alpha_src;
-			output.at<cv::Vec4b>(i, j)[3] = bgMask.at<cv::Vec4b>(i, j)[3] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[3] * alpha_src;
+			if (bgMask.at<cv::Vec4b>(i, j)[3] == 0) {
+				// 背景是透明的，无需二次混合
+				output.at<cv::Vec4b>(i, j)[0] = overlay.at<cv::Vec4b>(i, j)[0];
+				output.at<cv::Vec4b>(i, j)[1] = overlay.at<cv::Vec4b>(i, j)[1];
+				output.at<cv::Vec4b>(i, j)[2] = overlay.at<cv::Vec4b>(i, j)[2];
+				output.at<cv::Vec4b>(i, j)[3] = overlay.at<cv::Vec4b>(i, j)[3];// Alpha Channel
+			}
+			else {
+				// 两者融合
+				output.at<cv::Vec4b>(i, j)[0] = bgMask.at<cv::Vec4b>(i, j)[0] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[0] * alpha_src;
+				output.at<cv::Vec4b>(i, j)[1] = bgMask.at<cv::Vec4b>(i, j)[1] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[1] * alpha_src;
+				output.at<cv::Vec4b>(i, j)[2] = bgMask.at<cv::Vec4b>(i, j)[2] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[2] * alpha_src;
+				output.at<cv::Vec4b>(i, j)[3] = bgMask.at<cv::Vec4b>(i, j)[3] * alpha_dst + overlay.at<cv::Vec4b>(i, j)[3] * alpha_src;
+			}
 		}
 	}
-}
+}// blendBg
 
 void normalizePadding(int scale, const cv::Mat src, cv::Mat& dst) {
 
 	cv::Mat imgMat = src;
 	cv::cvtColor(src, imgMat, cv::COLOR_RGBA2BGRA);
 
-	cv::Scalar bgColor = cv::Scalar(247, 89, 10, 255);
-	//cv::Scalar bgColor = cv::Scalar(0, 0, 0, 0.2 * 255);
+	bool isBgColor = false;
+	cv::Scalar bgColor = cv::Scalar(247, 89, 10, 255);// 蓝色
+	//cv::Scalar bgColor = cv::Scalar(0, 0, 0, 0.2 * 255); // 灰色
 
 	//(24vp * 8) target ==> 192 * 192, 22vp as basic unit
 	//22 * 8 = |176 - 192| = 16vp
@@ -159,12 +173,19 @@ void normalizePadding(int scale, const cv::Mat src, cv::Mat& dst) {
 	bgMask.create(imgMat.rows + 2 * padding, imgMat.cols + 2 * padding, imgMat.type());
 	bgMask.setTo(cv::Scalar::all(0));
 	//cv::rectangle(bgMask, cv::Rect(0, 0, targetSize, targetSize), cv::Scalar(247, 89, 10, 255), cv::FILLED);
-	cv::circle(bgMask,
-		cv::Point(targetSize / 2, targetSize / 2),
-		targetSize / 2 - 1,
-		bgColor,//BGRA
-		cv::FILLED);
 
+	if (isBgColor) {
+		// 加背景
+		//cv::circle(bgMask,
+		//	cv::Point(targetSize / 2, targetSize / 2),
+		//	targetSize / 2 - 1,
+		//	bgColor,//BGRA
+		//	cv::FILLED);
+		cv::rectangle(bgMask, cv::Rect(0, 0, targetSize, targetSize), cv::Scalar(247, 89, 10, 255), cv::FILLED);
+	}
+
+	dst.create(imgMat.rows + 2 * padding, imgMat.cols + 2 * padding, imgMat.type());
+	dst.setTo(cv::Scalar::all(0));
 	blendBg(bgMask, padded, dst);
 }
 
@@ -492,7 +513,6 @@ void preview(int winWidth, int winHeight, cv::Mat destMat, cv::Mat grayMat, int 
 
 int main(int argc, char** argv)
 {
-
 	Console::setColor(ConsoleColors::GrayFore);
 	std::cout << "Welcome to Normalize Icon Tool.\n";
 	Console::setColor();
@@ -548,6 +568,8 @@ int main(int argc, char** argv)
 		cv::Mat imgMat = cv::Mat(ICON_HEIGHT, ICON_WIDTH, CV_8UC4, imgData, ICON_WIDTH * 4);
 
 		int scale = 8;
+
+		cv::imwrite("result.png", imgMat);
 
 		normalizePadding(scale, imgMat, destMat);
 
